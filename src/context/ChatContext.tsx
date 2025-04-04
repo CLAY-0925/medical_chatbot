@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { ChatSession, Message, CreateSessionResponse, GetSessionsResponse } from '../types';
 import { chatApi, convertApiMessageToMessage } from '../services/api';
@@ -32,21 +32,17 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     ? sessions.find(session => session.id === currentSessionId) || null
     : null;
 
-  // 处理WebSocket消息
-  const handleWebSocketMessage = (message: Message) => {
+  // 使用 useCallback 包装 handleWebSocketMessage
+  const handleWebSocketMessage = useCallback((message: Message) => {
     if (currentSessionId) {
       setSessions(prevSessions =>
         prevSessions.map(session => {
           if (session.id === currentSessionId) {
-            // 确保messages数组存在
             const messages = session.messages || [];
-            
-            // 检查消息是否已存在
             const messageExists = messages.some(msg => msg.id === message.id);
             if (messageExists) {
               return session;
             }
-            
             return {
               ...session,
               messages: [...messages, message],
@@ -57,7 +53,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         })
       );
     }
-  };
+  }, [currentSessionId]);
 
   // 监听WebSocket状态
   useEffect(() => {
@@ -93,14 +89,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [currentSessionId]);
 
-  // 加载会话列表
-  const loadSessions = async () => {
+  // 使用 useCallback 包装 loadSessions
+  const loadSessions = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const response = await chatApi.getSessions();
       if (response.success && response.data && response.data.sessions) {
-        // 初始化会话列表，为每个会话添加空的消息数组
         const sessionsWithMessages = response.data.sessions.map(session => ({
           ...session,
           messages: session.messages || [],
@@ -108,7 +103,6 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         setSessions(sessionsWithMessages);
         
-        // 如果有会话，选择第一个
         if (sessionsWithMessages.length > 0 && !currentSessionId) {
           setCurrentSessionId(sessionsWithMessages[0].id);
         }
@@ -121,7 +115,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentSessionId]);
 
   // 加载会话消息
   const loadSessionMessages = async (sessionId: string) => {
@@ -159,7 +153,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // 初始化加载会话
   useEffect(() => {
     loadSessions();
-  }, []);
+  }, [loadSessions]);
 
   // 当选择会话时，加载该会话的消息
   useEffect(() => {
@@ -278,6 +272,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         content,
         role: 'user',
         timestamp: new Date(),
+        messageType: 'USER'
       };
       
       setSessions(prevSessions =>
@@ -313,10 +308,18 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const anyResponse = response as any;
       
       if (response.success) {
-        // 检查响应中是否包含reply字段
-        if (anyResponse.reply) {
-          // 将API消息转换为应用消息
-          const botMessage = convertApiMessageToMessage(anyResponse.reply);
+        // 检查响应中是否包含message字段（新的API格式）
+        if (anyResponse.message) {
+          // 创建机器人回复消息
+          const botMessage: Message = {
+            id: uuidv4(),
+            content: anyResponse.message,
+            role: 'assistant',
+            timestamp: new Date(),
+            messageType: 'BOT',
+            relatedQuestions: anyResponse.follow_up_questions || [],
+            medicalRecord: anyResponse.medical_record || undefined
+          };
           
           // 更新会话的消息
           setSessions(prevSessions =>
@@ -337,14 +340,38 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           
           log('添加机器人回复:', botMessage);
         } 
-        // 如果没有reply字段，则尝试从data字段获取消息
+        // 检查响应中是否包含reply字段（旧的API格式）
+        else if (anyResponse.reply) {
+          // 将API消息转换为应用消息
+          const botMessage = convertApiMessageToMessage(anyResponse.reply);
+          
+          // 更新会话的消息
+          setSessions(prevSessions =>
+            prevSessions.map(session => {
+              if (session.id === currentSessionId) {
+                // 确保messages数组存在
+                const messages = session.messages || [];
+                
+                return {
+                  ...session,
+                  messages: [...messages, botMessage],
+                  updateTime: new Date().toISOString(),
+                };
+              }
+              return session;
+            })
+          );
+          
+          log('添加机器人回复(旧格式):', botMessage);
+        } 
+        // 如果没有message或reply字段，则尝试从data字段获取消息
         else if (response.data) {
           // 加载最新的消息列表
           await loadSessionMessages(currentSessionId);
         } 
-        // 如果既没有reply字段也没有data字段，则尝试重新加载消息
+        // 如果既没有message/reply字段也没有data字段，则尝试重新加载消息
         else {
-          log('响应中没有reply或data字段，尝试重新加载消息');
+          log('响应中没有message/reply或data字段，尝试重新加载消息');
           await loadSessionMessages(currentSessionId);
         }
       } else {

@@ -386,8 +386,10 @@ export const chatApi = {
     const response = await apiRequest<any>(
       config.apiPaths.chat.messages,
       'POST', 
-      { content },
-      { sessionId }
+      { 
+        session_id: sessionId,
+        message: content
+      }
     );
     
     // 记录完整的响应，便于调试

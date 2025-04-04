@@ -7,6 +7,25 @@ export interface Message {
   messageType?: 'USER' | 'BOT';
   medicalInfo?: any;
   relatedQuestions?: string[];
+  medicalRecord?: {
+    confirmed_info: {
+      基本信息: string;
+      主诉: string;
+      症状描述: string;
+      现病史: string;
+      既往史: string;
+      用药情况: string;
+      家族史: string;
+    };
+    pending_clues: {
+      待确认症状: string;
+      需澄清细节: string;
+    };
+    stage: {
+      信息收集: number;
+      鉴别诊断: number;
+    };
+  };
 }
 
 // 聊天会话类型

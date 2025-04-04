@@ -2,26 +2,14 @@ import React, { useState } from 'react';
 import { useAppSettings } from '../../context/AppSettingsContext';
 import { FaTimes, FaSearch, FaFileAlt } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MedicalCase, SearchResult } from '../../types';
+import { MedicalCase, SearchResult, Message } from '../../types';
+import { useChat } from '../../context/ChatContext';
+import { Box, Typography, Paper, LinearProgress, Grid, Divider } from '@mui/material';
 
 interface RightPanelProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-// 模拟数据
-const mockMedicalCase: MedicalCase = {
-  id: '1',
-  patientInfo: {
-    name: '张三',
-    age: 45,
-    gender: 'male',
-  },
-  symptoms: ['持续性头痛', '视力模糊', '恶心'],
-  diagnosis: '偏头痛',
-  treatment: '建议服用布洛芬缓解疼痛，避免强光刺激，保持充分休息',
-  notes: '患者有家族偏头痛病史，建议定期复查',
-};
 
 const mockSearchResults: SearchResult[] = [
   {
@@ -46,7 +34,15 @@ const mockSearchResults: SearchResult[] = [
 
 const RightPanel: React.FC<RightPanelProps> = ({ isOpen, onClose }) => {
   const { settings } = useAppSettings();
+  const { currentSession } = useChat();
   const [activeTab, setActiveTab] = useState<'case' | 'search'>('case');
+
+  const latestAssistantMessageWithRecord = currentSession?.messages
+    ?.slice()
+    .reverse()
+    .find(msg => msg.role === 'assistant' && msg.medicalRecord);
+    
+  const medicalRecord = latestAssistantMessageWithRecord?.medicalRecord;
 
   return (
     <AnimatePresence>
@@ -93,99 +89,153 @@ const RightPanel: React.FC<RightPanelProps> = ({ isOpen, onClose }) => {
           </div>
           
           <div className="flex-1 overflow-y-auto p-4">
-            {activeTab === 'case' && settings.enableCaseSummary && (
-              <div className="space-y-4">
-                <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    患者信息
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="text-gray-600 dark:text-gray-400">姓名：</div>
-                    <div className="text-gray-900 dark:text-white">{mockMedicalCase.patientInfo.name}</div>
-                    <div className="text-gray-600 dark:text-gray-400">年龄：</div>
-                    <div className="text-gray-900 dark:text-white">{mockMedicalCase.patientInfo.age}岁</div>
-                    <div className="text-gray-600 dark:text-gray-400">性别：</div>
-                    <div className="text-gray-900 dark:text-white">
-                      {mockMedicalCase.patientInfo.gender === 'male' ? '男' : '女'}
-                    </div>
+            {activeTab === 'case' && (
+              settings.enableCaseSummary ? (
+                medicalRecord ? (
+                  <Paper elevation={0} sx={{ bgcolor: 'transparent' }}>
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 'bold' }}>
+                        诊疗进度
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6}>
+                          <Typography variant="body2" color="text.secondary" gutterBottom>
+                            信息收集进度
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ flex: 1 }}>
+                              <LinearProgress 
+                                variant="determinate" 
+                                value={medicalRecord.stage.信息收集} 
+                                sx={{ 
+                                  height: 8, 
+                                  borderRadius: 4,
+                                  backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                                  '& .MuiLinearProgress-bar': {
+                                    backgroundColor: '#4CAF50'
+                                  }
+                                }}
+                              />
+                            </Box>
+                            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 35 }}>
+                              {medicalRecord.stage.信息收集}%
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={6}>
+                          <Typography variant="body2" color="text.secondary" gutterBottom>
+                            鉴别诊断进度
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{ flex: 1 }}>
+                              <LinearProgress 
+                                variant="determinate" 
+                                value={medicalRecord.stage.鉴别诊断} 
+                                sx={{ 
+                                  height: 8, 
+                                  borderRadius: 4,
+                                  backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                                  '& .MuiLinearProgress-bar': {
+                                    backgroundColor: '#2196F3'
+                                  }
+                                }}
+                              />
+                            </Box>
+                            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 35 }}>
+                              {medicalRecord.stage.鉴别诊断}%
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      </Grid>
+                    </Box>
+              
+                    <Divider sx={{ my: 2 }} />
+              
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 'bold' }}>
+                        患者信息
+                      </Typography>
+                      <Grid container spacing={1}>
+                        {Object.entries(medicalRecord.confirmed_info).map(([key, value]) => (
+                          value && (
+                            <Grid item xs={12} key={key}>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.2 }}>
+                                {key}
+                              </Typography>
+                              <Typography variant="body1" sx={{ color: 'text.primary' }}>
+                                {value}
+                              </Typography>
+                            </Grid>
+                          )
+                        ))}
+                      </Grid>
+                    </Box>
+              
+                    <Divider sx={{ my: 2 }} />
+              
+                    <Box>
+                      <Typography variant="h6" gutterBottom sx={{ color: 'text.primary', fontWeight: 'bold' }}>
+                        待确认信息
+                      </Typography>
+                      <Grid container spacing={1}>
+                        <Grid item xs={12}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.2 }}>
+                            待确认症状
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: 'warning.main' }}>
+                            {medicalRecord.pending_clues.待确认症状}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.2 }}>
+                            需澄清细节
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: 'warning.main' }}>
+                            {medicalRecord.pending_clues.需澄清细节}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  </Paper>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 dark:text-gray-400">
+                    <FaFileAlt className="text-4xl mb-4" />
+                    <p>当前会话暂无病例信息</p>
                   </div>
+                )
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 dark:text-gray-400">
+                  <FaFileAlt className="text-4xl mb-4" />
+                  <p>请在侧边栏启用病例总结功能</p>
                 </div>
-                
-                <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    症状
-                  </h3>
-                  <ul className="list-disc list-inside text-sm text-gray-900 dark:text-white">
-                    {mockMedicalCase.symptoms.map((symptom, index) => (
-                      <li key={index}>{symptom}</li>
-                    ))}
-                  </ul>
-                </div>
-                
-                <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    诊断
-                  </h3>
-                  <p className="text-sm text-gray-900 dark:text-white">{mockMedicalCase.diagnosis}</p>
-                </div>
-                
-                <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    治疗方案
-                  </h3>
-                  <p className="text-sm text-gray-900 dark:text-white">{mockMedicalCase.treatment}</p>
-                </div>
-                
-                {mockMedicalCase.notes && (
-                  <div className="card">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                      备注
-                    </h3>
-                    <p className="text-sm text-gray-900 dark:text-white">{mockMedicalCase.notes}</p>
-                  </div>
-                )}
-              </div>
+              )
             )}
             
-            {activeTab === 'search' && settings.enableWebSearch && (
-              <div className="space-y-4">
-                {mockSearchResults.map(result => (
-                  <div key={result.id} className="card hover:shadow-lg transition-shadow">
-                    <h3 className="text-md font-semibold text-primary-main dark:text-primary-light mb-1">
-                      <a href={result.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                        {result.title}
-                      </a>
-                    </h3>
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">{result.snippet}</p>
-                    <a
-                      href={result.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-gray-500 dark:text-gray-400 hover:underline truncate block"
-                    >
-                      {result.url}
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {activeTab === 'case' && !settings.enableCaseSummary && (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <FaFileAlt className="text-4xl text-gray-400 dark:text-gray-600 mb-4" />
-                <p className="text-gray-600 dark:text-gray-400">
-                  请在侧边栏启用病例总结功能
-                </p>
-              </div>
-            )}
-            
-            {activeTab === 'search' && !settings.enableWebSearch && (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <FaSearch className="text-4xl text-gray-400 dark:text-gray-600 mb-4" />
-                <p className="text-gray-600 dark:text-gray-400">
-                  请在侧边栏启用联网搜索功能
-                </p>
-              </div>
+            {activeTab === 'search' && (
+              settings.enableWebSearch ? (
+                <div className="space-y-4">
+                  {mockSearchResults.map(result => (
+                    <Paper key={result.id} elevation={1} sx={{ p: 2, bgcolor: 'background.default', '&:hover': { boxShadow: 3 } }}>
+                      <Typography variant="h6" component="h3" sx={{ mb: 1, color: 'primary.main' }}>
+                        <a href={result.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          {result.title}
+                        </a>
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{result.snippet}</Typography>
+                      <Typography variant="caption" color="text.disabled" sx={{ wordBreak: 'break-all' }}>
+                        <a href={result.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          {result.url}
+                        </a>
+                      </Typography>
+                    </Paper>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 dark:text-gray-400">
+                  <FaSearch className="text-4xl mb-4" />
+                  <p>请在侧边栏启用联网搜索功能</p>
+                </div>
+              )
             )}
           </div>
         </motion.div>
